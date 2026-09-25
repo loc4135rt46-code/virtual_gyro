@@ -1,0 +1,55 @@
+name: gen-hidl-headers
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sparse-checkout hardware/interfaces (sensors 1.0/2.0/2.1)
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            https://android.googlesource.com/platform/hardware/interfaces interfaces
+          cd interfaces
+          git sparse-checkout init --cone
+          git sparse-checkout set sensors/1.0 sensors/2.0 sensors/2.1
+          git checkout main
+
+      - name: Sparse-checkout system/libhidl (transport + base .hal)
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            https://android.googlesource.com/platform/system/libhidl libhidl
+          cd libhidl
+          git sparse-checkout init --cone
+          git sparse-checkout set transport base
+          git checkout main
+
+      - name: Fetch prebuilt hidl-gen (linux-x86 only, why this runs on CI not on-phone)
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            https://android.googlesource.com/platform/prebuilts/build-tools build-tools
+          cd build-tools
+          git sparse-checkout init --cone
+          git sparse-checkout set linux-x86/bin
+          git checkout main
+          chmod +x linux-x86/bin/hidl-gen
+
+      - name: Generate C++ headers + sources for sensors 1.0/2.0/2.1
+        run: |
+          HIDLGEN=$(pwd)/build-tools/linux-x86/bin/hidl-gen
+          mkdir -p gen
+          for v in 1.0 2.0 2.1; do
+            $HIDLGEN -o gen -Lc++-headers \
+              -r android.hardware:interfaces -r android.hidl:libhidl \
+              android.hardware.sensors@$v
+            $HIDLGEN -o gen -Lc++-sources \
+              -r android.hardware:interfaces -r android.hidl:libhidl \
+              android.hardware.sensors@$v
+          done
+          find gen -type f
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sensors-hidl-gen-output
+          path: gen
