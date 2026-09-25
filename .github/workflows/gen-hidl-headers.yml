@@ -14,7 +14,7 @@ jobs:
           cd interfaces
           git sparse-checkout init --cone
           git sparse-checkout set sensors/1.0 sensors/2.0 sensors/2.1
-          git checkout master
+          git checkout main
 
       - name: Sparse-checkout system/libhidl (transport + base .hal)
         run: |
@@ -23,7 +23,7 @@ jobs:
           cd libhidl
           git sparse-checkout init --cone
           git sparse-checkout set transport base
-          git checkout master
+          git checkout main
 
       - name: Fetch prebuilt hidl-gen (linux-x86 only, why this runs on CI not on-phone)
         run: |
