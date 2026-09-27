@@ -42,10 +42,10 @@ jobs:
           mkdir -p gen
           for v in 1.0 2.0 2.1; do
             $HIDLGEN -o gen -Lc++-headers \
-              -r android.hardware:interfaces -r android.hidl:libhidl \
+              -r android.hardware:interfaces -r android.hidl:libhidl/transport \
               android.hardware.sensors@$v
             $HIDLGEN -o gen -Lc++-sources \
-              -r android.hardware:interfaces -r android.hidl:libhidl \
+              -r android.hardware:interfaces -r android.hidl:libhidl/transport \
               android.hardware.sensors@$v
           done
           find gen -type f
