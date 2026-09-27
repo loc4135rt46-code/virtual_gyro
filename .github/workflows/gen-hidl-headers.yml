@@ -31,13 +31,14 @@ jobs:
             https://android.googlesource.com/platform/prebuilts/build-tools build-tools
           cd build-tools
           git sparse-checkout init --cone
-          git sparse-checkout set linux-x86/bin
+          git sparse-checkout set linux-x86/bin linux-x86/lib64
           git checkout $(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
           chmod +x linux-x86/bin/hidl-gen
 
       - name: Generate C++ headers + sources for sensors 1.0/2.0/2.1
         run: |
           HIDLGEN=$(pwd)/build-tools/linux-x86/bin/hidl-gen
+          export LD_LIBRARY_PATH=$(pwd)/build-tools/linux-x86/lib64
           mkdir -p gen
           for v in 1.0 2.0 2.1; do
             $HIDLGEN -o gen -Lc++-headers \
