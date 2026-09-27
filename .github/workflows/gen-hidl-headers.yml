@@ -25,6 +25,24 @@ jobs:
           git sparse-checkout set transport base
           git checkout main
 
+      - name: Sparse-checkout system/core (libutils + libcutils headers)
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            https://android.googlesource.com/platform/system/core core
+          cd core
+          git sparse-checkout init --cone
+          git sparse-checkout set libutils/include libcutils/include
+          git checkout main
+
+      - name: Sparse-checkout system/logging (liblog headers - lib nay tach khoi system/core roi)
+        run: |
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            https://android.googlesource.com/platform/system/logging logging
+          cd logging
+          git sparse-checkout init --cone
+          git sparse-checkout set liblog/include
+          git checkout main
+
       - name: Fetch prebuilt hidl-gen (linux-x86 only, why this runs on CI not on-phone)
         run: |
           git clone --filter=blob:none --no-checkout --depth 1 \
@@ -55,6 +73,16 @@ jobs:
           mkdir -p gen/multihal
           cp -r interfaces/sensors/common/default/. gen/multihal/
           find gen/multihal -type f
+
+      - name: Copy libutils/libcutils/liblog headers (can de compile sp<>, hidl_vec, log)
+        run: |
+          mkdir -p gen/system-headers/utils gen/system-headers/cutils \
+                   gen/system-headers/log gen/system-headers/android
+          cp -r core/libutils/include/utils/. gen/system-headers/utils/
+          cp -r core/libcutils/include/cutils/. gen/system-headers/cutils/
+          cp -r logging/liblog/include/log/. gen/system-headers/log/
+          cp -r logging/liblog/include/android/. gen/system-headers/android/
+          find gen/system-headers -type f
 
       - uses: actions/upload-artifact@v4
         with:
