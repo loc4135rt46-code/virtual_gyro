@@ -32,7 +32,7 @@ jobs:
           cd build-tools
           git sparse-checkout init --cone
           git sparse-checkout set linux-x86/bin
-          git checkout FETCH_HEAD
+          git checkout $(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
           chmod +x linux-x86/bin/hidl-gen
 
       - name: Generate C++ headers + sources for sensors 1.0/2.0/2.1
