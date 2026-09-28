@@ -13,9 +13,9 @@
 #include <time.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -32,7 +32,9 @@ namespace V2_1 {
 namespace subhal {
 namespace implementation {
 
-static constexpr const char* kVirtGyroSocketPath = "/dev/socket/virtgyro";
+// Socket Unix "abstract namespace" (@virtgyro): khong co file tren dia nen khong bi
+// DAC/SELinux cua /dev/socket chan (HAL sensors chay user system, /dev/socket la root 0755).
+static constexpr const char* kVirtGyroSocketName = "virtgyro";
 
 int64_t Sensor::nowBootNanos() {
     struct timespec t;
@@ -44,7 +46,6 @@ Sensor::Sensor(int32_t sensorHandle, ISensorsEventCallback* callback)
     : mIsEnabled(false),
       mSamplingPeriodNs(0),
       mLastSampleTimeNs(0),
-      mStopThread(false),
       mCallback(callback),
       mMode(OperationMode::NORMAL) {
     mSensorInfo.sensorHandle = sensorHandle;
@@ -183,27 +184,33 @@ VirtualGyroSensor::~VirtualGyroSensor() {
 }
 
 void VirtualGyroSensor::socketReaderLoop() {
-    int fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-    if (fd < 0) {
-        ALOGE("khong tao duoc socket AF_UNIX: %s", strerror(errno));
-        return;
-    }
-
     struct sockaddr_un addr;
     memset(&addr, 0, sizeof(addr));
     addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, kVirtGyroSocketPath, sizeof(addr.sun_path) - 1);
+    const size_t nameLen = strlen(kVirtGyroSocketName);
+    memcpy(addr.sun_path + 1, kVirtGyroSocketName, nameLen);  // sun_path[0] = '\0' -> abstract
+    const socklen_t addrLen = offsetof(struct sockaddr_un, sun_path) + 1 + nameLen;
 
-    unlink(kVirtGyroSocketPath);  // xoa file cu sot lai neu HAL restart
-    if (bind(fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
-        ALOGE("khong bind duoc %s: %s", kVirtGyroSocketPath, strerror(errno));
-        close(fd);
+    int fd = -1;
+    while (!mStopSocketThread) {
+        fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+        if (fd >= 0 && bind(fd, reinterpret_cast<struct sockaddr*>(&addr), addrLen) == 0) {
+            break;
+        }
+        ALOGE("tao/bind socket abstract @%s that bai: %s (thu lai sau 2s)", kVirtGyroSocketName,
+              strerror(errno));
+        if (fd >= 0) {
+            close(fd);
+            fd = -1;
+        }
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+    if (fd < 0) {
         return;
     }
-    chmod(kVirtGyroSocketPath, 0666);
 
     mSocketFd.store(fd);
-    ALOGI("da mo %s, cho gyro_relay ghi du lieu vao", kVirtGyroSocketPath);
+    ALOGI("da mo socket abstract @%s, cho gyro_relay gui du lieu vao", kVirtGyroSocketName);
 
     uint8_t buf[64];
     while (!mStopSocketThread) {
