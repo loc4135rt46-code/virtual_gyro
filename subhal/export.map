@@ -1,0 +1,6 @@
+{
+  global:
+    sensorsHalGetSubHal_2_1;
+  local:
+    *;
+};

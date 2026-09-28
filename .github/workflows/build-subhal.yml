@@ -1,0 +1,110 @@
+name: build-subhal
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'subhal/**'
+      - '.github/workflows/build-subhal.yml'
+
+env:
+  # Nhanh AOSP de lay header. Neu repo nao khong co nhanh nay thi tu dong
+  # roi ve nhanh mac dinh (xem ham aosp_clone).
+  AOSP_BRANCH: android15-release
+  API: '30'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch AOSP headers (sparse, shallow)
+        run: |
+          mkdir -p aosp && cd aosp
+          # aosp_clone <path> <sparse dir>...   (khong doan ten nhanh mac dinh)
+          aosp_clone() {
+            local path="$1"; shift
+            local url="https://android.googlesource.com/platform/$path"
+            mkdir -p "$(dirname "$path")"
+            git clone --depth 1 --filter=blob:none --sparse --branch "$AOSP_BRANCH" "$url" "$path" \
+              || git clone --depth 1 --filter=blob:none --sparse "$url" "$path"
+            git -C "$path" sparse-checkout set "$@"
+            echo "== $path @ $(git -C "$path" rev-parse --abbrev-ref HEAD) $(git -C "$path" rev-parse --short HEAD)"
+          }
+          aosp_clone hardware/interfaces sensors
+          aosp_clone system/libhidl base transport
+          aosp_clone system/libhwbinder include
+          aosp_clone system/libbase include
+          aosp_clone system/logging liblog
+          aosp_clone system/core libutils libcutils libsystem
+          # hidl-gen x86 dung san (build-tools chi de HEAD, khong ep ten nhanh)
+          git clone --depth 1 --filter=blob:none --sparse \
+            https://android.googlesource.com/platform/prebuilts/build-tools build-tools
+          git -C build-tools sparse-checkout set linux-x86/bin linux-x86/lib64
+          chmod +x build-tools/linux-x86/bin/hidl-gen
+
+      - name: Generate HIDL headers (base, sensors 1.0/2.0/2.1)
+        run: |
+          cd aosp
+          export LD_LIBRARY_PATH="$PWD/build-tools/linux-x86/lib64:${LD_LIBRARY_PATH:-}"
+          HIDLGEN="$PWD/build-tools/linux-x86/bin/hidl-gen"
+          mkdir -p gen
+          for pkg in android.hidl.base@1.0 android.hardware.sensors@1.0 \
+                     android.hardware.sensors@2.0 android.hardware.sensors@2.1; do
+            "$HIDLGEN" -o gen -L c++-headers \
+              -r android.hardware:hardware/interfaces \
+              -r android.hidl:system/libhidl/transport "$pkg"
+          done
+          find gen -name '*.h' | head -20
+
+      - name: Compile VirtualGyroSubHal.so (NDK, libc++ static)
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          A="$PWD/aosp"
+          MH="$A/hardware/interfaces/sensors/common/default/2.X/multihal/include"
+          INC=(
+            -I"$A/gen" -Isubhal -I"$MH"
+            -I"$A/hardware/interfaces/sensors/common/utils"
+            -I"$A/hardware/interfaces/sensors/common/utils/include"
+            -I"$A/system/libhidl/base/include"
+            -I"$A/system/libhidl/transport/include"
+            -I"$A/system/libhwbinder/include"
+            -I"$A/system/libbase/include"
+            -I"$A/system/logging/liblog/include"
+            -I"$A/system/core/libutils/include"
+            -I"$A/system/core/libutils/binder/include"
+            -I"$A/system/core/libcutils/include"
+            -I"$A/system/core/libsystem/include"
+          )
+          mkdir -p out
+          OUT="out/android.hardware.sensors@2.X-subhal-virtgyro.so"
+          "$BIN/aarch64-linux-android${API}-clang++" \
+            -std=gnu++20 -O2 -fPIC -shared -DANDROID -D__ANDROID_VNDK__ -D__ANDROID_VENDOR__ \
+            -Wall -Wno-unused-parameter -Wno-deprecated-declarations \
+            "${INC[@]}" subhal/*.cpp \
+            -static-libstdc++ -llog \
+            -Wl,--exclude-libs,ALL -Wl,--version-script=subhal/export.map \
+            -Wl,-soname,android.hardware.sensors@2.X-subhal-virtgyro.so \
+            -o "$OUT"
+          ls -l out
+
+      - name: Verify .so
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_ROOT}"
+          BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          SO="out/android.hardware.sensors@2.X-subhal-virtgyro.so"
+          echo "--- NEEDED ---";        "$BIN/llvm-readelf" -d "$SO" | grep NEEDED
+          echo "--- exported ---";      "$BIN/llvm-nm" -D --defined-only "$SO" | c++filt
+          echo "--- undefined (se duoc HAL process cung cap luc dlopen) ---"
+          "$BIN/llvm-nm" -D -u "$SO" | c++filt | head -80
+          n=$("$BIN/llvm-nm" -D -u "$SO" | grep -c '__ndk1' || true)
+          echo "undefined __ndk1 symbols: $n (mong doi 0)"
+          "$BIN/llvm-nm" -D --defined-only "$SO" | grep -q sensorsHalGetSubHal_2_1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: virtgyro-subhal-so
+          path: out/android.hardware.sensors@2.X-subhal-virtgyro.so
