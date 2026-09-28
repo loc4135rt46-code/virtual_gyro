@@ -37,6 +37,7 @@ jobs:
           aosp_clone system/libhidl base transport
           aosp_clone system/libhwbinder include
           aosp_clone system/libfmq include base
+          aosp_clone hardware/libhardware include
           aosp_clone system/libbase include
           aosp_clone system/logging liblog
           aosp_clone system/core libutils libcutils libsystem
@@ -52,11 +53,22 @@ jobs:
           export LD_LIBRARY_PATH="$PWD/build-tools/linux-x86/lib64:${LD_LIBRARY_PATH:-}"
           HIDLGEN="$PWD/build-tools/linux-x86/bin/hidl-gen"
           mkdir -p gen
-          for pkg in android.hidl.base@1.0 android.hardware.sensors@1.0 \
-                     android.hardware.sensors@2.0 android.hardware.sensors@2.1; do
+          gen() {
             "$HIDLGEN" -o gen -L c++-headers \
               -r android.hardware:hardware/interfaces \
-              -r android.hidl:system/libhidl/transport "$pkg"
+              -r android.hidl:system/libhidl/transport "$1"
+          }
+          # bat buoc (fail la dung)
+          for pkg in android.hidl.base@1.0 android.hidl.manager@1.0 \
+                     android.hardware.sensors@1.0 android.hardware.sensors@2.0 \
+                     android.hardware.sensors@2.1; do
+            gen "$pkg"
+          done
+          # phu, phong header khac keo them (loi thi chi canh bao)
+          for pkg in android.hidl.manager@1.1 android.hidl.safe_union@1.0 \
+                     android.hidl.memory@1.0 android.hidl.memory.block@1.0 \
+                     android.hidl.allocator@1.0 android.hidl.token@1.0; do
+            gen "$pkg" || echo "::warning::hidl-gen bo qua $pkg"
           done
           find gen -name '*.h' | head -20
 
@@ -77,6 +89,7 @@ jobs:
             -I"$A/system/libhidl/base/include"
             -I"$A/system/libhidl/transport/include"
             -I"$A/system/libhwbinder/include"
+            -I"$A/hardware/libhardware/include"
             -I"$A/system/libfmq/include" -I"$FMQ_BASE"
             -I"$A/system/libbase/include"
             -I"$A/system/logging/liblog/include"
