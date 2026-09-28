@@ -36,7 +36,7 @@ jobs:
           aosp_clone hardware/interfaces sensors
           aosp_clone system/libhidl base transport
           aosp_clone system/libhwbinder include
-          aosp_clone system/libfmq include
+          aosp_clone system/libfmq include base
           aosp_clone system/libbase include
           aosp_clone system/logging liblog
           aosp_clone system/core libutils libcutils libsystem
@@ -66,6 +66,10 @@ jobs:
           BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
           A="$PWD/aosp"
           MH="$A/hardware/interfaces/sensors/common/default/2.X/multihal/include"
+          F=$(find "$A/system/libfmq" -name MQDescriptorBase.h | head -1)
+          echo "MQDescriptorBase.h -> ${F:-KHONG TIM THAY}"
+          test -n "$F"
+          FMQ_BASE=$(dirname "$(dirname "$F")")   # thu muc chua fmq/
           INC=(
             -I"$A/gen" -Isubhal -I"$MH"
             -I"$A/hardware/interfaces/sensors/common/utils"
@@ -73,7 +77,7 @@ jobs:
             -I"$A/system/libhidl/base/include"
             -I"$A/system/libhidl/transport/include"
             -I"$A/system/libhwbinder/include"
-            -I"$A/system/libfmq/include"
+            -I"$A/system/libfmq/include" -I"$FMQ_BASE"
             -I"$A/system/libbase/include"
             -I"$A/system/logging/liblog/include"
             -I"$A/system/core/libutils/include"
