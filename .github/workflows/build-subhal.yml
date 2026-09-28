@@ -36,6 +36,7 @@ jobs:
           aosp_clone hardware/interfaces sensors
           aosp_clone system/libhidl base transport
           aosp_clone system/libhwbinder include
+          aosp_clone system/libfmq include
           aosp_clone system/libbase include
           aosp_clone system/logging liblog
           aosp_clone system/core libutils libcutils libsystem
@@ -72,6 +73,7 @@ jobs:
             -I"$A/system/libhidl/base/include"
             -I"$A/system/libhidl/transport/include"
             -I"$A/system/libhwbinder/include"
+            -I"$A/system/libfmq/include"
             -I"$A/system/libbase/include"
             -I"$A/system/logging/liblog/include"
             -I"$A/system/core/libutils/include"
