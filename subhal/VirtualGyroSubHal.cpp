@@ -38,41 +38,6 @@ VirtualGyroSubHal::VirtualGyroSubHal() : mCallback(nullptr) {
     mSensors[kGyroHandle] = gyro;
 }
 
-// V2_1::SensorInfo -> V1_0::SensorInfo (cung cac truong, chi khac kieu enum `type`).
-static ::android::hardware::sensors::V1_0::SensorInfo toOldSensorInfo(const SensorInfo& n) {
-    ::android::hardware::sensors::V1_0::SensorInfo o;
-    o.sensorHandle = n.sensorHandle;
-    o.name = n.name;
-    o.vendor = n.vendor;
-    o.version = n.version;
-    o.type = static_cast<::android::hardware::sensors::V1_0::SensorType>(n.type);
-    o.typeAsString = n.typeAsString;
-    o.maxRange = n.maxRange;
-    o.resolution = n.resolution;
-    o.power = n.power;
-    o.minDelay = n.minDelay;
-    o.fifoReservedEventCount = n.fifoReservedEventCount;
-    o.fifoMaxEventCount = n.fifoMaxEventCount;
-    o.requiredPermission = n.requiredPermission;
-    o.maxDelay = n.maxDelay;
-    o.flags = n.flags;
-    return o;
-}
-
-Return<void> VirtualGyroSubHal::getSensorsList(getSensorsList_cb _hidl_cb) {
-    std::vector<::android::hardware::sensors::V1_0::SensorInfo> sensors;
-    for (const auto& entry : mSensors) {
-        sensors.push_back(toOldSensorInfo(entry.second->getSensorInfo()));
-    }
-    _hidl_cb(sensors);
-    return Void();
-}
-
-Return<Result> VirtualGyroSubHal::injectSensorData(
-        const ::android::hardware::sensors::V1_0::Event& /* event */) {
-    return Result::INVALID_OPERATION;
-}
-
 Return<void> VirtualGyroSubHal::getSensorsList_2_1(getSensorsList_2_1_cb _hidl_cb) {
     std::vector<SensorInfo> sensors;
     for (const auto& entry : mSensors) {

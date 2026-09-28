@@ -36,12 +36,7 @@ class VirtualGyroSubHal : public ISensorsSubHal, public ISensorsEventCallback {
     const std::string getName() override { return "VirtualGyroSubHal"; }
     Return<Result> initialize(const sp<IHalProxyCallback>& halProxyCallback) override;
 
-    // Tu ISensors 2.0 (kieu du lieu V1_0) - pure virtual nen bat buoc phai co,
-    // du HalProxy 2.1 chi goi ban _2_1.
-    Return<void> getSensorsList(getSensorsList_cb _hidl_cb) override;
-    Return<Result> injectSensorData(const ::android::hardware::sensors::V1_0::Event& event) override;
-
-    // Tu ISensors 2.1
+    // Tu ISensors 2.1 (+ ke thua 2.0/1.0)
     Return<void> getSensorsList_2_1(getSensorsList_2_1_cb _hidl_cb) override;
     Return<Result> injectSensorData_2_1(const Event& event) override;
     Return<Result> setOperationMode(OperationMode mode) override;
