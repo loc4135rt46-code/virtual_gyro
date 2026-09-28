@@ -130,7 +130,7 @@ jobs:
           mkdir -p out
           OUT="out/android.hardware.sensors@2.X-subhal-virtgyro.so"
           "$BIN/aarch64-linux-android${API}-clang++" \
-            -std=gnu++20 -O2 -fPIC -shared -DANDROID -D__ANDROID_VNDK__ -D__ANDROID_VENDOR__ \
+            -std=gnu++20 -O2 -fPIC -shared -fno-rtti -DANDROID -D__ANDROID_VNDK__ -D__ANDROID_VENDOR__ \
             -Wall -Wno-unused-parameter -Wno-deprecated-declarations \
             -nostdinc++ -isystem "$LCX/arch" -isystem "$LCX/generic" \
             "${INC[@]}" subhal/*.cpp \
@@ -154,7 +154,10 @@ jobs:
           echo "undefined __ndk1: $n (BAT BUOC = 0) | undefined std::__1: $m (mong doi > 0)"
           "$BIN/llvm-readelf" -d "$SO" | grep -q 'libc++.so'
           "$BIN/llvm-nm" -D --defined-only "$SO" | grep -q sensorsHalGetSubHal_2_1
+          t=$("$BIN/llvm-nm" -D -u "$SO" | grep -cE '_ZTIN7android(4hidl|8hardware)' || true)
+          echo "undefined typeinfo lop HIDL: $t (BAT BUOC = 0, may khong xuat typeinfo)"
           test "$n" -eq 0
+          test "$t" -eq 0
 
       - uses: actions/upload-artifact@v4
         with:
