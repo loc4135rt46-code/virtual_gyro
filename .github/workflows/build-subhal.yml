@@ -80,7 +80,7 @@ jobs:
           # tu build lai giong het duoc) - dlopen tren may that bao thieu dung
           # ISensors::interfaceChain vi truoc gio chua link vao day.
           for f in android.hardware.sensors@1.0.so android.hardware.sensors@2.0.so \
-                   android.hardware.sensors@2.1.so; do
+                   android.hardware.sensors@2.1.so android.hardware.sensors@2.0-ScopedWakelock.so; do
             test -f "prebuilt-libs/$f" || {
               echo "::error::thieu prebuilt-libs/$f - pull tu may that (/vendor/lib64/$f) roi commit vao repo"
               exit 1
@@ -104,6 +104,7 @@ jobs:
             prebuilt-libs/android.hardware.sensors@1.0.so
             prebuilt-libs/android.hardware.sensors@2.0.so
             prebuilt-libs/android.hardware.sensors@2.1.so
+            prebuilt-libs/android.hardware.sensors@2.0-ScopedWakelock.so
           )
           INC=(
             -I"$A/gen" -Isubhal -I"$MH"
@@ -176,14 +177,12 @@ jobs:
           "$BIN/llvm-readelf" -d "$SO" | grep -q 'libc++.so'
           "$BIN/llvm-nm" -D --defined-only "$SO" | grep -q sensorsHalGetSubHal_2_1
           for so in android.hardware.sensors@1.0.so android.hardware.sensors@2.0.so \
-                    android.hardware.sensors@2.1.so; do
+                    android.hardware.sensors@2.1.so android.hardware.sensors@2.0-ScopedWakelock.so; do
             "$BIN/llvm-readelf" -d "$SO" | grep -q "$so" || { echo "::error::thieu NEEDED $so"; exit 1; }
           done
-          u=$("$BIN/llvm-nm" -D -u "$SO" | grep -c 'interfaceChain\|10interfaceChain' || true)
-          echo "undefined interfaceChain: $u (ky vong duoc resolve boi chinh tien trinh samsung-multihal luc dlopen that)"
-          if [ "$u" -gt 0 ]; then
-            echo "::warning::con $u symbol interfaceChain chua resolve tinh - chi test duoc that tren may, khong chan build"
-          fi
+          # Luu y: interfaceChain/ping/getHashChain... van hien "undefined" trong
+          # chinh file .so nay - BINH THUONG, vi day la symbol tu 3 lib NEEDED o
+          # tren, chi thuc su duoc noi luc dlopen tren may, khong phai luc build.
           t=$("$BIN/llvm-nm" -D -u "$SO" | grep -cE '_ZTIN7android(4hidl|8hardware)' || true)
           echo "undefined typeinfo lop HIDL: $t (BAT BUOC = 0, may khong xuat typeinfo)"
           test "$n" -eq 0
