@@ -16,20 +16,22 @@ import java.net.SocketTimeoutException
 import kotlin.concurrent.thread
 
 // Nhan gyro qua UDP tu ESP8266 (cong 47819), forward nguyen 12 byte qua TCP
-// loopback 127.0.0.1:8842 toi gyro_relay.
+// loopback 127.0.0.1:8842 toi gyro_relay. Khong he scale/sua gia tri goi -
+// do nhay hoan toan phu thuoc firmware ESP8266, khong doi gi o day.
 //
-// Xu ly mat ket noi: soTimeout ngan (UDP_TIMEOUT_MS) tren socket UDP. Ngay
-// khi 1 lan receive() timeout (khong doi/dem nguoc gi them), coi nhu ESP da
-// mat nguon - forward thang goi 12 byte toan 0 xuong relay de gyro tro ve
-// (0,0,0) ngay lap tuc, tranh nhan vat bi ket hanh dong vi giu gia tri cu.
-// Chi lam viec nay 1 lan luc CHUYEN trang thai (dang connected -> mat), khong
-// lap lai moi 300ms trong luc van dang mat, vi gia tri da la 0 roi thi khong
-// can gui lai. Co goi that ve lai thi tro lai binh thuong ngay.
+// Xu ly mat ket noi: soTimeout CHI la chu ky poll ngan (de vong lap khong
+// block vinh vien), KHONG phai nguong mat ket noi. Nguong that
+// (DISCONNECT_THRESHOLD_MS) tinh theo thoi gian thuc te ke tu goi cuoi cung
+// nhan duoc (lastPacketAtMs) - chi khi im lang LIEN TUC qua het nguong nay
+// moi gui 1 goi 12 byte toan 0 xuong relay (gyro ve 0,0,0 ngay). Cach nay
+// tranh bi WiFi giat 1 nhip ngan la zero oan, gay cam giac giat/giam do
+// nhay nhu ban truoc (ban cu dung dung 1 lan timeout 300ms la zero ngay).
 class GyroUdpService : Service() {
 
     companion object {
         private const val UDP_PORT = 47819
-        private const val UDP_TIMEOUT_MS = 300 // 200-500ms deu duoc, chinh o day
+        private const val POLL_TIMEOUT_MS = 100          // chu ky kiem tra, KHONG phai nguong mat ket noi
+        private const val DISCONNECT_THRESHOLD_MS = 600  // im lang LIEN TUC qua moc nay moi coi la mat
         private const val RELAY_HOST = "127.0.0.1"
         private const val RELAY_PORT = 8842
         private const val CHANNEL_ID = "gyro_service"
@@ -59,16 +61,17 @@ class GyroUdpService : Service() {
     private fun receiveLoop() {
         var relaySocket: Socket? = null
         val buf = ByteArray(64)
-        val zeroBuf = ByteArray(12) // toan 0 san (3x float32 0.0f) - dung khi mat ket noi
+        val zeroBuf = ByteArray(12) // toan 0 san (3x float32 0.0f) - dung khi mat ket noi that
         var packetCount = 0
         var connected = false
+        var lastPacketAtMs = System.currentTimeMillis()
 
         while (running) {
             try {
                 if (udpSocket == null) {
                     udpSocket = DatagramSocket(null).apply {
                         reuseAddress = true
-                        soTimeout = UDP_TIMEOUT_MS
+                        soTimeout = POLL_TIMEOUT_MS
                         bind(InetSocketAddress(UDP_PORT))
                     }
                 }
@@ -80,9 +83,9 @@ class GyroUdpService : Service() {
                 try {
                     udpSocket!!.receive(packet)
                 } catch (e: SocketTimeoutException) {
-                    // Khong nhan duoc goi nao trong UDP_TIMEOUT_MS -> mat ket noi.
-                    // Zero NGAY, khong doi them lan timeout nao nua.
-                    if (connected) {
+                    // Chi la 1 chu ky poll khong co goi - CHUA chac mat ket noi that.
+                    val silentForMs = System.currentTimeMillis() - lastPacketAtMs
+                    if (connected && silentForMs >= DISCONNECT_THRESHOLD_MS) {
                         connected = false
                         try {
                             relaySocket?.getOutputStream()?.write(zeroBuf)
@@ -96,6 +99,7 @@ class GyroUdpService : Service() {
                 }
 
                 if (packet.length == 12) {
+                    lastPacketAtMs = System.currentTimeMillis()
                     if (!connected) {
                         connected = true
                         updateNotification("Đã kết nối lại - nhận từ ${packet.address.hostAddress}")
