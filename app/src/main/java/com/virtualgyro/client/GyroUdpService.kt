@@ -23,9 +23,12 @@ import kotlin.concurrent.thread
 // block vinh vien), KHONG phai nguong mat ket noi. Nguong that
 // (DISCONNECT_THRESHOLD_MS) tinh theo thoi gian thuc te ke tu goi cuoi cung
 // nhan duoc (lastPacketAtMs) - chi khi im lang LIEN TUC qua het nguong nay
-// moi gui 1 goi 12 byte toan 0 xuong relay (gyro ve 0,0,0 ngay). Cach nay
-// tranh bi WiFi giat 1 nhip ngan la zero oan, gay cam giac giat/giam do
-// nhay nhu ban truoc (ban cu dung dung 1 lan timeout 300ms la zero ngay).
+// moi gui 1 goi 12 byte toan 0 xuong relay (gyro ve 0,0,0 ngay).
+//
+// isPaused: co de MainActivity dieu khien nut "Tam dung"/"Tiep tuc". Dang
+// tam dung van tiep tuc nhan+bo qua goi UDP (tranh don backlog), nhung
+// KHONG forward xuong relay - va zero 1 lan luc vua chuyen sang tam dung,
+// y het co che xu ly mat ket noi.
 class GyroUdpService : Service() {
 
     companion object {
@@ -36,6 +39,9 @@ class GyroUdpService : Service() {
         private const val RELAY_PORT = 8842
         private const val CHANNEL_ID = "gyro_service"
         private const val NOTIF_ID = 1
+
+        @Volatile var isServiceRunning = false
+        @Volatile var isPaused = false
     }
 
     @Volatile private var running = false
@@ -45,6 +51,8 @@ class GyroUdpService : Service() {
         super.onCreate()
         startForeground(NOTIF_ID, buildNotification("Đang chờ dữ liệu gyro..."))
         running = true
+        isServiceRunning = true
+        isPaused = false
         thread(start = true) { receiveLoop() }
     }
 
@@ -54,6 +62,7 @@ class GyroUdpService : Service() {
 
     override fun onDestroy() {
         running = false
+        isServiceRunning = false
         try { udpSocket?.close() } catch (_: Exception) {}
         super.onDestroy()
     }
@@ -61,7 +70,7 @@ class GyroUdpService : Service() {
     private fun receiveLoop() {
         var relaySocket: Socket? = null
         val buf = ByteArray(64)
-        val zeroBuf = ByteArray(12) // toan 0 san (3x float32 0.0f) - dung khi mat ket noi that
+        val zeroBuf = ByteArray(12) // toan 0 san (3x float32 0.0f) - dung khi mat ket noi/tam dung
         var packetCount = 0
         var connected = false
         var lastPacketAtMs = System.currentTimeMillis()
@@ -85,7 +94,7 @@ class GyroUdpService : Service() {
                 } catch (e: SocketTimeoutException) {
                     // Chi la 1 chu ky poll khong co goi - CHUA chac mat ket noi that.
                     val silentForMs = System.currentTimeMillis() - lastPacketAtMs
-                    if (connected && silentForMs >= DISCONNECT_THRESHOLD_MS) {
+                    if (connected && (isPaused || silentForMs >= DISCONNECT_THRESHOLD_MS)) {
                         connected = false
                         try {
                             relaySocket?.getOutputStream()?.write(zeroBuf)
@@ -93,21 +102,36 @@ class GyroUdpService : Service() {
                             try { relaySocket?.close() } catch (_: Exception) {}
                             relaySocket = null
                         }
-                        updateNotification("Mất kết nối ESP8266 - gyro đã về 0")
+                        updateNotification(if (isPaused) "Đã tạm dừng - gyro về 0" else "Mất kết nối ESP8266 - gyro đã về 0")
                     }
                     continue
                 }
 
                 if (packet.length == 12) {
                     lastPacketAtMs = System.currentTimeMillis()
-                    if (!connected) {
-                        connected = true
-                        updateNotification("Đã kết nối lại - nhận từ ${packet.address.hostAddress}")
-                    }
-                    relaySocket!!.getOutputStream().write(buf, 0, 12)
-                    packetCount++
-                    if (packetCount % 50 == 0) {
-                        updateNotification("Đã nhận $packetCount gói từ ${packet.address.hostAddress}")
+
+                    if (isPaused) {
+                        // Van nhan de khong don backlog, nhung khong forward.
+                        if (connected) {
+                            connected = false
+                            try {
+                                relaySocket?.getOutputStream()?.write(zeroBuf)
+                            } catch (_: Exception) {
+                                try { relaySocket?.close() } catch (_: Exception) {}
+                                relaySocket = null
+                            }
+                            updateNotification("Đã tạm dừng - gyro về 0")
+                        }
+                    } else {
+                        if (!connected) {
+                            connected = true
+                            updateNotification("Đã kết nối lại - nhận từ ${packet.address.hostAddress}")
+                        }
+                        relaySocket!!.getOutputStream().write(buf, 0, 12)
+                        packetCount++
+                        if (packetCount % 50 == 0) {
+                            updateNotification("Đã nhận $packetCount gói từ ${packet.address.hostAddress}")
+                        }
                     }
                 }
             } catch (e: Exception) {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#1A1625</color>
+    <color name="card_bg">#2A2438</color>
+    <color name="accent_pink">#F07FA8</color>
+    <color name="accent_pink_dark">#C9548A</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B8AFC9</color>
+    <color name="btn_stop">#E05A6E</color>
+    <color name="btn_disabled">#4A4458</color>
+</resources>
