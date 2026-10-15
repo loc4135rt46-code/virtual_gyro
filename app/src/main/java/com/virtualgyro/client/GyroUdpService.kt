@@ -13,6 +13,8 @@ import java.net.DatagramSocket
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlin.concurrent.thread
 
 // Nhan gyro qua UDP tu ESP8266 (cong 47819), forward nguyen 12 byte qua TCP
@@ -42,6 +44,14 @@ class GyroUdpService : Service() {
 
         @Volatile var isServiceRunning = false
         @Volatile var isPaused = false
+
+        // Chi de MainActivity doc hien thi (dot trang thai + gia tri X/Y/Z
+        // realtime) - khong anh huong logic forward/relay ben duoi.
+        @Volatile var isConnected = false
+        @Volatile var packetCount = 0
+        @Volatile var lastX = 0f
+        @Volatile var lastY = 0f
+        @Volatile var lastZ = 0f
     }
 
     @Volatile private var running = false
@@ -53,6 +63,8 @@ class GyroUdpService : Service() {
         running = true
         isServiceRunning = true
         isPaused = false
+        isConnected = false
+        packetCount = 0
         thread(start = true) { receiveLoop() }
     }
 
@@ -71,7 +83,6 @@ class GyroUdpService : Service() {
         var relaySocket: Socket? = null
         val buf = ByteArray(64)
         val zeroBuf = ByteArray(12) // toan 0 san (3x float32 0.0f) - dung khi mat ket noi/tam dung
-        var packetCount = 0
         var connected = false
         var lastPacketAtMs = System.currentTimeMillis()
 
@@ -96,6 +107,8 @@ class GyroUdpService : Service() {
                     val silentForMs = System.currentTimeMillis() - lastPacketAtMs
                     if (connected && (isPaused || silentForMs >= DISCONNECT_THRESHOLD_MS)) {
                         connected = false
+                        isConnected = false
+                        lastX = 0f; lastY = 0f; lastZ = 0f
                         try {
                             relaySocket?.getOutputStream()?.write(zeroBuf)
                         } catch (_: Exception) {
@@ -114,6 +127,8 @@ class GyroUdpService : Service() {
                         // Van nhan de khong don backlog, nhung khong forward.
                         if (connected) {
                             connected = false
+                            isConnected = false
+                            lastX = 0f; lastY = 0f; lastZ = 0f
                             try {
                                 relaySocket?.getOutputStream()?.write(zeroBuf)
                             } catch (_: Exception) {
@@ -125,9 +140,12 @@ class GyroUdpService : Service() {
                     } else {
                         if (!connected) {
                             connected = true
+                            isConnected = true
                             updateNotification("Đã kết nối lại - nhận từ ${packet.address.hostAddress}")
                         }
                         relaySocket!!.getOutputStream().write(buf, 0, 12)
+                        val bb = ByteBuffer.wrap(buf, 0, 12).order(ByteOrder.LITTLE_ENDIAN)
+                        lastX = bb.float; lastY = bb.float; lastZ = bb.float
                         packetCount++
                         if (packetCount % 50 == 0) {
                             updateNotification("Đã nhận $packetCount gói từ ${packet.address.hostAddress}")
@@ -139,6 +157,7 @@ class GyroUdpService : Service() {
                 try { relaySocket?.close() } catch (_: Exception) {}
                 relaySocket = null
                 connected = false
+                isConnected = false
                 Thread.sleep(500)
             }
         }

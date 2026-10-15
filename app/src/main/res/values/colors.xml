@@ -8,4 +8,9 @@
     <color name="text_secondary">#B8AFC9</color>
     <color name="btn_stop">#E05A6E</color>
     <color name="btn_disabled">#4A4458</color>
+
+    <!-- chấm trạng thái -->
+    <color name="dot_connected">#4ADE80</color>
+    <color name="dot_waiting">#F5B83D</color>
+    <color name="dot_off">#6B6579</color>
 </resources>
